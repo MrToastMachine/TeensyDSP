@@ -1,19 +1,18 @@
-filename = "sineWave.csv"
+# %%
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+filename = "data.csv"
+
+data = pd.read_csv(filename, header=None).squeeze().to_numpy()
 
 
-with open(filename, 'r') as file:
-    arr = file.read().split(',')
-
-    print("num vals:", len(arr))
-    for i in range(5):
-        print(type(arr[i]),arr[i])
-        
-    float_arr = [float(i) for i in arr]
-
-    print("num vals:", len(float_arr))
-    for i in range(5):
-        print(type(float_arr[i]),float_arr[i])
 
 
-print(f"sum of file: {sum(float_arr)}")
-    
+# %%
+plt.figure()
+plt.plot(data[2:, 0], data[2:, 1])
+plt.xlabel('Column 0')
+plt.ylabel('Column 1')
+plt.show()
