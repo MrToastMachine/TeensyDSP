@@ -4,19 +4,21 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.io import wavfile
 from scipy import signal
+import pandas as pd
 import argparse
 import os
 
 
-
-
-def plot_spectrogram(csv_file, output_file=None, fmax=None, fs=48000):    
+def plot_spectrogram(csv_file, fmax=None, fs=48000):    
 
     sample_rate = fs
 
-    with open(csv_file, 'r') as file:
-        arr = file.read().split(',')
-        audio_data = np.array([float(val) for val in arr])
+    file = pd.read_csv(csv_file, header=None)
+    audio_data = file.values.flatten()
+
+    # with open(csv_file, 'r') as file:
+    #     arr = file.read().split(',')
+    #     audio_data = np.array([float(val) for val in arr])
   
 
     # Create the spectrogram
@@ -26,7 +28,7 @@ def plot_spectrogram(csv_file, output_file=None, fmax=None, fs=48000):
         window='hann',
         nperseg=1024,
         noverlap=512,
-        nfft=1024
+        nfft=4096
     )
     
     # Convert to dB scale
@@ -40,7 +42,7 @@ def plot_spectrogram(csv_file, output_file=None, fmax=None, fs=48000):
     plt.pcolormesh(times, frequencies, Sxx_db, shading='gouraud', cmap='viridis')
     plt.ylabel('Frequency (Hz)')
     plt.xlabel('Time (s)')
-    plt.title(f'Spectrogram of {os.path.basename(csv_file)}')
+    # plt.title(f'Spectrogram of {os.path.basename(csv_file)}')
     plt.colorbar(label='Power (dB)')
     # Set frequency limits if specified
     if fmax is not None:
@@ -57,22 +59,33 @@ def plot_spectrogram(csv_file, output_file=None, fmax=None, fs=48000):
     
     plt.tight_layout()
     
-    # Save or show the plot
-    if output_file:
-        plt.savefig(output_file, dpi=300, bbox_inches='tight')
-        print(f"Spectrogram saved to: {output_file}")
-    else:
-        plt.show()
+    plt.show()
 
-def main():
+def main(testFile=None):
+
+    if testFile:
+        try:
+            plot_spectrogram(testFile, fmax=300)
+        except Exception as e:
+            print("error in main")
+            print(f"Error: {e}")
+            return 1
+        return 0
+    
+
     parser = argparse.ArgumentParser(description='Plot spectrogram of a WAV file')
     parser.add_argument('csv_file', help='Path to the WAV file')
-    parser.add_argument('-o', '--output', help='Output file path for saving the plot')
     parser.add_argument('--fmax', type=float, help='Maximum frequency to display (Hz)')
     
     args = parser.parse_args()
     
-    plot_spectrogram(args.csv_file, args.output, args.fmax)
+    try:
+        # plot_spectrogram(args.csv_file)
+        plot_spectrogram(args.csv_file, args.fmax)
+    except Exception as e:
+        print("Error goop")
+        # print(f"Error: {e}")
+        return
     
     return 0
 
@@ -81,8 +94,10 @@ if __name__ == "__main__":
     import sys
     
     if len(sys.argv) < 2:
-        print("Usage: python spectrogram_plotter.py <csv_file> [-o output_file]")
-        print("Example: python spectrogram_plotter.py audio.csv -o spectrogram.png")
-        sys.exit(1)
+        sys.exit(main('pythonWork/out.csv'))
+
+        # print("Usage: python spectrogram_plotter.py <csv_file> [-o output_file]")
+        # print("Example: python spectrogram_plotter.py audio.csv -o spectrogram.png")
+        # sys.exit(1)
     
     sys.exit(main())
