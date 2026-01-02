@@ -9,7 +9,7 @@ import sys
 
 DEFAULT_FILE_PATH = sys.argv[0][::-1].partition('/')[2][::-1] + "/out.wav"
 
-print(DEFAULT_FILE_PATH)
+print(f"DEFAULT_FILE_PATH: {DEFAULT_FILE_PATH}")
 
 def plot_freq_content(wav_file, output_file=None, fmax=None):
     
@@ -98,7 +98,7 @@ if __name__ == "__main__":
         print("Usage: python spectrogram_plotter.py <wav_file> [-o output_file]")
         print("Example: python spectrogram_plotter.py audio.wav -o spectrogram.png")
 
-        print("Defaulting to file '{DEFAULT_FILE_PATH}'")
+        print(f"Defaulting to file '{DEFAULT_FILE_PATH}'")
 
         sys.exit(main(DEFAULT_FILE_PATH))
     

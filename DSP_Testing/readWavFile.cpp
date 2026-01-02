@@ -20,6 +20,35 @@ struct WAVHeader {
     uint32_t dataSize;      // Data chunk size
 };
 
+void printWavMetaData(const std::string& filename, bool printFirst100Samples=false){
+
+    std::ifstream file(filename, std::ios::binary);
+    
+    if (!file.is_open()) {
+        std::cerr << "Error: Could not open file " << filename << std::endl;
+        return;
+    }
+    
+    WAVHeader header;
+    file.read(reinterpret_cast<char*>(&header), sizeof(WAVHeader));
+    
+    // Verify it's a valid WAV file
+    if (strncmp(header.riff, "RIFF", 4) != 0 || 
+        strncmp(header.wave, "WAVE", 4) != 0) {
+        std::cerr << "Error: Not a valid WAV file" << std::endl;
+        return;
+    }
+    
+    // Print WAV file info
+    std::cout << "WAV File Information:" << std::endl;
+    std::cout << "Sample Rate: " << header.sampleRate << " Hz" << std::endl;
+    std::cout << "Channels: " << header.numChannels << std::endl;
+    std::cout << "Bits per Sample: " << header.bitsPerSample << std::endl;
+    std::cout << "Audio Format: " << header.audioFormat << std::endl;
+    std::cout << "Data Size: " << header.dataSize << " bytes" << std::endl;
+    std::cout << std::endl;
+}
+
 void parseWAV(const std::string& filename, bool printFirst100Samples=false) {
     std::ifstream file(filename, std::ios::binary);
     
