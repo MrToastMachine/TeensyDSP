@@ -8,7 +8,13 @@
 static constexpr uint32_t TABLE_SIZE = 256;
 static uint8_t sineTable[TABLE_SIZE];
 
+static const uint16_t SAMPLE_RATE = 44100;
+
 static volatile uint32_t phase = 0;
+
+float k = 0.0f;
+float k_step = 1.0f; 
+
 
 void genTable(){
 
@@ -22,24 +28,34 @@ void genTable(){
     if (y > 255) y = 255;
     sineTable[i] = (uint8_t)y;
 
-		std::cout << y << std::endl;
+		// std::cout << y << std::endl;
 	}
 }
 
 int main(int argc, char* argv[]){
 
-	int numIterations;
+	genTable();
+
+	int input_freq;
 
 	if (argc == 2){
-		numIterations = atoi(argv[1]);
+		input_freq = atoi(argv[1]);
 	} else {
-		numIterations = 3;
+		input_freq = 100;
 	}
 
-	for (int i = 0; i < numIterations; i++) {
+	k_step = (float)(input_freq * TABLE_SIZE) / (float)SAMPLE_RATE;
+
+	// std::cout << "k_step " << k_step << std::endl;
+
+	for (int i = 0; i < SAMPLE_RATE; i++) {
 	
-		genTable();
+		int table_index = (int)std::floor(k) % TABLE_SIZE;
+		std::cout << (int)sineTable[table_index] << std::endl;
+
+		k += k_step;
 
 	}
+	
 	return 0;
 }
