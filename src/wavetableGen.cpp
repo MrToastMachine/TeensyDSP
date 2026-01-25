@@ -1,5 +1,10 @@
 #include <Arduino.h>
 
+// Capacitive Touch Libs
+#include <Wire.h>
+#include "Adafruit_MPR121.h"
+
+
 #include <sstream>
 #include <complex>
 #include <vector>
@@ -19,20 +24,25 @@ static constexpr uint8_t DAC_PIN_5 = 5;
 static constexpr uint8_t DAC_PIN_6 = 6;
 static constexpr uint8_t DAC_PIN_7 = 7; // MSB
 
-
-
 /* WAVETABLE GEN STUFF */
 
 static constexpr uint32_t TABLE_SIZE = 256;
 static uint8_t sineTable[TABLE_SIZE];
 
-static const uint16_t SAMPLE_RATE = 44100;
+static const float SAMPLE_RATE = 44100.0;
+static const float PERIOD_US = 1000000.0/SAMPLE_RATE;
 
 static volatile uint32_t phase = 0;
 
 float k = 0.0f;
 float k_step = 1.0f; 
 
+static IntervalTimer sampleTimer;
+static bool sample_flag = false;
+
+static bool note_pressed = true;
+
+int newest_sample = 0;
 
 void genTable(){
 
@@ -62,7 +72,34 @@ static inline void writeDAC(uint8_t v) {
   digitalWriteFast(DAC_PIN_7, (v >> 7) & 1);
 }
 
+void calculateNextSample(){
+	int table_index = (int)std::floor(k) % TABLE_SIZE;
 
+	// TODO: Replace this line with general reference to 'active_table'
+	// instead of directly calling sineTable
+	newest_sample = sineTable[table_index];
+
+	k += k_step;
+}
+
+void onSampleTick(){
+	sample_flag = note_pressed;
+}
+
+void testTiming(){
+
+  int start_time, end_time;
+
+  start_time = micros();
+  writeDAC(newest_sample);
+  calculateNextSample();
+  sample_flag = false;
+  end_time = micros();
+
+
+  Serial.print("Time taken single sample: ");
+  Serial.println(end_time - start_time);
+}
 
 void setup() {
   pinMode(DAC_PIN_0, OUTPUT);
@@ -77,12 +114,51 @@ void setup() {
 
 	genTable();
 
-	int input_freq;
-	k_step = (float)(input_freq * TABLE_SIZE) / (float)SAMPLE_RATE;
+	k_step = (float)(440 * TABLE_SIZE) / (float)SAMPLE_RATE;
 
+  Serial.begin(115200);
+  while (!Serial){
+    delay(100);
+  }
+
+	sampleTimer.begin(onSampleTick, PERIOD_US);
+
+  // for (int i = 0; i < 100; i++)
+  // {
+  //   testTiming();
+  // }
+  
 }
 
 void loop(){
-	// check for flag flipped by interrupt
-	// if flag > call R2R write
+
+
+
+	if (sample_flag){
+		writeDAC(newest_sample);
+		calculateNextSample();
+    sample_flag = false;
+	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
