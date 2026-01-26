@@ -38,7 +38,7 @@ float k = 0.0f;
 float k_step = 1.0f; 
 
 static IntervalTimer sampleTimer;
-static bool sample_flag = false;
+static volatile bool sample_flag = false;
 
 static bool note_pressed = true;
 
@@ -121,6 +121,8 @@ void setup() {
     delay(100);
   }
 
+  Serial.println("Starting Wavetable Gen Test");
+
 	sampleTimer.begin(onSampleTick, PERIOD_US);
 
   // for (int i = 0; i < 100; i++)
@@ -128,16 +130,17 @@ void setup() {
   //   testTiming();
   // }
   
+
+  // writeDAC(0x7F); // Midpoint voltage
 }
 
 void loop(){
-
-
 
 	if (sample_flag){
 		writeDAC(newest_sample);
 		calculateNextSample();
     sample_flag = false;
+    // Serial.println("Sample -> " + String(newest_sample));
 	}
 }
 
