@@ -24,7 +24,7 @@ csv_file = args.file
 df = pd.read_csv(csv_file)
 
 plt.plot(df.iloc[:,0], df.iloc[:,1])
-plt.xlim([0,1000])
+# plt.xlim([0,1000])
 plt.show()
 
 
