@@ -1,93 +1,111 @@
 // #include <Arduino.h>
-// #include <Wire.h>
+#include <Wire.h>
+#include "Adafruit_MPR121.h"
 
-// static const uint8_t ADDR = 0x5B;
+Adafruit_MPR121 cap;
 
-// static uint8_t read8(uint8_t reg) {
-//   Wire.beginTransmission(ADDR);
-//   Wire.write(reg);
-//   uint8_t e = Wire.endTransmission(false);
-//   if (e != 0) return 0xFF;
-//   Wire.requestFrom(ADDR, (uint8_t)1);
-//   return Wire.available() ? Wire.read() : 0xFE;
-// }
+static const uint8_t NCH = 12;
 
-// static uint16_t read16(uint8_t reg) {
-//   Wire.beginTransmission(ADDR);
-//   Wire.write(reg);
-//   uint8_t e = Wire.endTransmission(false);
-//   if (e != 0) return 0xFFFF;
-//   Wire.requestFrom(ADDR, (uint8_t)2);
-//   uint8_t lo = Wire.available() ? Wire.read() : 0;
-//   uint8_t hi = Wire.available() ? Wire.read() : 0;
-//   return (uint16_t)lo | ((uint16_t)hi << 8);
-// }
+// Software baseline in "filtered units"
+float baseline[NCH];
 
-// static uint8_t write8(uint8_t reg, uint8_t val) {
-//   Wire.beginTransmission(ADDR);
-//   Wire.write(reg);
-//   Wire.write(val);
-//   return Wire.endTransmission(true); // 0 = success
-// }
+// Touch state
+bool isTouched[NCH];
 
-// static void dumpAck(const char* name, uint8_t err) {
-//   Serial.print(name);
-//   Serial.print(" write err=");
-//   Serial.println(err);
-// }
+// Hysteresis thresholds in filtered-units delta
+// delta = baseline - filtered  (touch => delta increases)
+float touchTh = 8.0f;
+float releaseTh = 4.0f;
 
-// void setup() {
-//   Serial.begin(115200);
-//   delay(200);
+// Baseline adaptation:
+// smaller = slower baseline (more stable, less drift)
+float alpha = 0.01f; // 1% per sample (~slow). Increase if baseline never tracks drift.
 
-//   Wire.begin();
-//   Wire.setClock(100000);
+uint32_t lastPrint = 0;
 
-//   Serial.println("Soft reset...");
-//   dumpAck("SRST(0x80=0x63)", write8(0x80, 0x63));
-//   delay(50);
+void setup() {
+  Serial.begin(115200);
+  delay(200);
+  Wire.begin();
 
-//   Serial.println("Stop mode (ECR=0)...");
-//   dumpAck("ECR stop", write8(0x5E, 0x00));
-//   delay(10);
+  if (!cap.begin(0x5B)) {
+    Serial.println("MPR121 not found");
+    while (1) delay(10);
+  }
 
-//   // Set thresholds for all 12 electrodes:
-//   // Touch thresholds start at 0x41, release at 0x42, then pairs per channel.
-//   // We'll do touch=6, release=3
-//   Serial.println("Writing thresholds...");
-//   for (uint8_t i = 0; i < 12; i++) {
-//     dumpAck("TTH", write8(0x41 + 2*i, 6));
-//     dumpAck("RTH", write8(0x42 + 2*i, 3));
-//   }
+  // Initial baseline capture (hands off!)
+  delay(500);
+  for (uint8_t i = 0; i < NCH; i++) {
+    baseline[i] = (float)cap.filteredData(i);
+    isTouched[i] = false;
+  }
 
-//   // Run mode: enable 12 electrodes, calibration lock OFF (CL=00), ELE=12 -> 0x0C
-//   Serial.println("Run mode (ECR=0x0C)...");
-//   dumpAck("ECR run", write8(0x5E, 0x0C));
+  Serial.println("Software-touch mode (using filteredData only)");
+  Serial.println("delta = baseline - filtered (touch makes delta grow)");
+  Serial.println("Commands: th <touch> <release> | a <alpha>");
+}
 
-//   delay(1500); // hands off; let baselines form
+void loop() {
+  // Optional simple serial commands to tune without recompiling
+  if (Serial.available()) {
+    String s = Serial.readStringUntil('\n');
+    s.trim();
+    if (s.startsWith("th ")) {
+      float t, r;
+      if (sscanf(s.c_str(), "th %f %f", &t, &r) == 2) {
+        touchTh = t;
+        releaseTh = r;
+        if (releaseTh >= touchTh) releaseTh = touchTh * 0.5f;
+        Serial.print("touchTh="); Serial.print(touchTh);
+        Serial.print(" releaseTh="); Serial.println(releaseTh);
+      }
+    } else if (s.startsWith("a ")) {
+      float a;
+      if (sscanf(s.c_str(), "a %f", &a) == 1) {
+        if (a < 0.0001f) a = 0.0001f;
+        if (a > 0.2f) a = 0.2f;
+        alpha = a;
+        Serial.print("alpha="); Serial.println(alpha, 6);
+      }
+    }
+  }
 
-//   Serial.print("ECR readback = 0x"); Serial.println(read8(0x5E), HEX);
-//   Serial.print("TTH0 readback= "); Serial.println(read8(0x41));
-//   Serial.print("RTH0 readback= "); Serial.println(read8(0x42));
-//   Serial.println();
-// }
+  for (uint8_t i = 0; i < NCH; i++) {
+    float f = (float)cap.filteredData(i);
+    float d = baseline[i] - f; // touch => f drops => d increases
 
-// void loop() {
-//   Serial.println("ch, baseline, filtered, delta");
-//   for (uint8_t i = 0; i < 12; i++) {
-//     uint8_t  b = read8(0x1E + i);         // baseline is 8-bit
-//     uint16_t f = read16(0x04 + 2*i);      // filtered is 16-bit
-//     int16_t  d = (int16_t)f - (int16_t)((uint16_t)b * 8);
-//     Serial.print(i); Serial.print(", ");
-//     Serial.print(b); Serial.print(", ");
-//     Serial.print(f); Serial.print(", ");
-//     Serial.println(d);
-//   }
+    // Touch/release logic with hysteresis
+    if (!isTouched[i]) {
+      if (d >= touchTh) {
+        isTouched[i] = true;
+        Serial.print(i); Serial.println(" touched");
+      } else {
+        // Only update baseline when NOT touched
+        baseline[i] = (1.0f - alpha) * baseline[i] + alpha * f;
+      }
+    } else {
+      if (d <= releaseTh) {
+        isTouched[i] = false;
+        Serial.print(i); Serial.println(" released");
+        // After release, re-seed baseline a bit toward current
+        baseline[i] = (1.0f - 5*alpha) * baseline[i] + (5*alpha) * f;
+      }
+      // While touched, do NOT adapt baseline (prevents “learning the touch”)
+    }
+  }
 
-//   uint16_t t = read16(0x00);
-//   Serial.print("touch mask (raw 0x00..01) = 0b");
-//   Serial.println(t, BIN);
+  // Periodic debug: show deltas so you can choose thresholds
+  if (millis() - lastPrint > 500) {
+    lastPrint = millis();
+    Serial.print("deltas: ");
+    for (uint8_t i = 0; i < NCH; i++) {
+      float f = (float)cap.filteredData(i);
+      float d = baseline[i] - f;
+      Serial.print((int)d);
+      if (i != NCH - 1) Serial.print(", ");
+    }
+    Serial.println();
+  }
 
-//   Serial.println("---");
-//   delay(300);
-// }
+  delay(10);
+}
