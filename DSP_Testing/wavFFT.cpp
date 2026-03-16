@@ -73,7 +73,11 @@ void loadWavFile(const std::string& filename, std::vector<std::complex<double>>&
 	
 		alldata.push_back(newest_val);
 
+		// newest_val is a 16-bit signed integer, convert to double and store as complex number (imaginary part = 0)
+
 		data_out.push_back(std::complex<double>(static_cast<double>(newest_val)));
+		
+
 
 		if (num_datapoints == num_lines){
 			break;
@@ -119,11 +123,47 @@ std::vector<std::complex<double>> fft(const std::vector<std::complex<double>>& s
     return result;
 }
 
+std::complex<double>* fft_arr_attempt(const <std::complex<double>& samples, const int n) {
+
+	// Base case for recursion 
+	if (n == 1) {
+			return samples;
+	}
+
+	// Split samples into even and odd arrays
+	std::complex<double>[n/2] even_samples;
+	std::complex<double>[n/2] odd_samples;
+
+	for (int i = 0; i < n / 2; ++i) {
+			even_samples[i] = samples[2 * i];
+			odd_samples[i] = samples[2 * i + 1];
+	}
+
+	// Recursively run the above lines
+	std::complex<double>* even_fft = fft(even_samples);
+	std::complex<double>* odd_fft = fft(odd_samples);
+
+	// Combine the values at each level
+	std::complex<double>[n] result;
+	for (int k = 0; k < n / 2; ++k) {
+			std::complex<double> t =
+					std::polar(1.0, -2 * M_PI * k / n) * odd_fft[k];
+			result[k] = even_fft[k] + t;
+			result[k + n / 2] = even_fft[k] - t; // Takes advantage of symmetry
+	}
+
+	return result;
+}
+
 void computeFFT(const std::string& filename, int num_datapoints = 0){
 
 	std::vector<std::complex<double>> wavData;
 
 	loadWavFile(filename, wavData, num_datapoints);
+
+
+	// wavData here is the equivalent of one full block ready to analyse
+
 
 	std::vector<std::complex<double>> output_freq_bins = fft(wavData);
 
@@ -136,10 +176,6 @@ void computeFFT(const std::string& filename, int num_datapoints = 0){
 }
 
 int main(int argc, char* argv[]) {
-	// Example usage (not in video, but needed for a complete program)
-	// std::vector<std::complex<double>> input_samples = {
-	//     {0, 0}, {1, 0}, {0, 0}, {-1, 0}
-	// }; // Example: samples from a sine wave as shown in video
 
 	int nPoints = 0;
 

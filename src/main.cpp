@@ -1,229 +1,204 @@
-// // Simple WAV recorder for Teensy 4.1
-// // - Mono input (A0 by default, change if needed)
-// // - 16-bit, 44.1 kHz
-// // - Writes to built-in microSD as "RECORD.WAV"
+// Simple WAV recorder for Teensy 4.1
+// - Mono input (A0 by default, change if needed)
+// - 16-bit, 44.1 kHz
+// - Writes to built-in microSD as "RECORD.WAV"
 
-// #include <Arduino.h>
-// #include <Audio.h>
-// #include <Wire.h>
-// #include <SPI.h>
-// #include <SD.h>
-
-
-// // OLED display libraries
-// #include <SPI.h>
-// #include <Adafruit_GFX.h>
-// #include <Adafruit_SSD1306.h>
-// #include <math.h>
-// #include <stdio.h>
-
-// #define SCREEN_WIDTH 128 // OLED display width, in pixels
-// #define SCREEN_HEIGHT 64 // OLED display height, in pixels
-
-// // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-// #define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
-// Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-
-// // END OF OLED STUFF
+#include <Arduino.h>
+#include <Audio.h>
+#include <Wire.h>
+#include <SPI.h>
+#include <SD.h>
 
 
-// // -------- Audio Objects --------
-// // Use analog input (mono). On Teensy 4.1, A0 is a good default.
-// // You can change AUDIO_INPUT_PIN below if you like.
-// #define AUDIO_INPUT_PIN A0
+// OLED display libraries
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <math.h>
+#include <stdio.h>
+#include <complex>
 
-// AudioInputAnalog         adc1(AUDIO_INPUT_PIN);  // mono analog in
-// AudioRecordQueue         queue1;                 // queue for recording
-// AudioConnection          patchCord1(adc1, queue1);
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
 
-// // No audio shield, so no AudioControl object needed
+// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
+#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// // -------- SD / WAV Globals --------
-// File audioFile;
-
-// const uint32_t SAMPLE_RATE      = 44100;
-// const uint16_t BITS_PER_SAMPLE  = 16;
-// const uint16_t NUM_CHANNELS     = 1;    // mono
-
-// // We record for a fixed duration (milliseconds)
-// const uint32_t RECORD_TIME_MS   = 10000;  // 10 seconds (change as needed)
-
-// elapsedMillis recordTimer;
-// bool isRecording = false;
-
-// // We'll count how many samples we wrote to update the WAV header at the end.
-// uint32_t totalSamplesWritten = 0;
-
-// // -------- Helpers to write little-endian values --------
-// void writeLittleEndian16(File &f, uint16_t value) {
-//   uint8_t b[2];
-//   b[0] = value & 0xFF;
-//   b[1] = (value >> 8) & 0xFF;
-//   f.write(b, 2);
-// }
-
-// void writeLittleEndian32(File &f, uint32_t value) {
-//   uint8_t b[4];
-//   b[0] = value & 0xFF;
-//   b[1] = (value >> 8) & 0xFF;
-//   b[2] = (value >> 16) & 0xFF;
-//   b[3] = (value >> 24) & 0xFF;
-//   f.write(b, 4);
-// }
-
-// // -------- Write initial (placeholder) WAV header --------
-// void writeWavHeader(File &f) {
-//   // We'll write a standard 44-byte header.
-//   // Sizes will be patched when we're done recording.
-
-//   // RIFF chunk descriptor
-//   f.write("RIFF", 4);
-//   writeLittleEndian32(f, 0);  // Placeholder for chunk size (file size - 8)
-
-//   // WAVE header
-//   f.write("WAVE", 4);
-
-//   // fmt subchunk
-//   f.write("fmt ", 4);
-//   writeLittleEndian32(f, 16);                 // Subchunk1Size = 16 for PCM
-//   writeLittleEndian16(f, 1);                  // AudioFormat = 1 (PCM)
-//   writeLittleEndian16(f, NUM_CHANNELS);       // NumChannels
-//   writeLittleEndian32(f, SAMPLE_RATE);        // SampleRate
-
-//   uint32_t byteRate = SAMPLE_RATE * NUM_CHANNELS * (BITS_PER_SAMPLE / 8);
-//   writeLittleEndian32(f, byteRate);           // ByteRate
-
-//   uint16_t blockAlign = NUM_CHANNELS * (BITS_PER_SAMPLE / 8);
-//   writeLittleEndian16(f, blockAlign);         // BlockAlign
-
-//   writeLittleEndian16(f, BITS_PER_SAMPLE);    // BitsPerSample
-
-//   // data subchunk
-//   f.write("data", 4);
-//   writeLittleEndian32(f, 0);  // Placeholder for Subchunk2Size (data size)
-// }
-
-// // -------- Patch WAV header when recording is done --------
-// void finalizeWavHeader(File &f, uint32_t totalSamples) {
-//   uint32_t dataSize = totalSamples * NUM_CHANNELS * (BITS_PER_SAMPLE / 8);
-//   uint32_t riffSize = 36 + dataSize;  // 4 + (8 + Subchunk1Size) + (8 + Subchunk2Size)
-
-//   // Patch RIFF chunk size at offset 4
-//   f.seek(4);
-//   writeLittleEndian32(f, riffSize);
-
-//   // Patch data subchunk size at offset 40
-//   f.seek(40);
-//   writeLittleEndian32(f, dataSize);
-// }
-
-// // -------- Setup --------
-// void setup() {
-//   Serial.begin(115200);
+// END OF OLED STUFF
 
 
-//   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
-//   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
-//     Serial.println(F("SSD1306 allocation failed"));
-//     for(;;); // Don't proceed, loop forever
-//   }
+// -------- Audio Objects --------
+// Use analog input (mono). On Teensy 4.1, A0 is a good default.
+// You can change AUDIO_INPUT_PIN below if you like.
+#define AUDIO_INPUT_PIN A0
 
-//   // Show initial display buffer contents on the screen --
-//   // the library initializes this with an Adafruit splash screen.
-//   display.display();
-//   delay(2000); // Pause for 2 seconds
+AudioInputAnalog         adc1(AUDIO_INPUT_PIN);  // mono analog in
+AudioRecordQueue         queue1;                 // queue for recording
+AudioConnection          patchCord1(adc1, queue1);
 
-//   // Clear the buffer
-//   display.clearDisplay();
+// No audio shield, so no AudioControl object needed
 
-//   // Draw a single pixel in white
-//   display.drawPixel(10, 10, WHITE);
+// -------- SD / WAV Globals --------
+File audioFile;
 
-//   // Show the display buffer on the screen. You MUST call display() after
-//   // drawing commands to make them visible on screen!
-//   display.display();
-//   // delay(2000);
+const uint32_t SAMPLE_RATE      = 44100;
+const uint16_t BITS_PER_SAMPLE  = 16;
+const uint16_t NUM_CHANNELS     = 1;    // mono
+
+const uint16_t FFT_DATABANK_SIZE = 8192;
+std::vector<std::complex<double>> fft_databank(FFT_DATABANK_SIZE);
+std::vector<std::complex<double>> fft_output_bins(FFT_DATABANK_SIZE);
+
+bool isRecording = false;
+
+uint16_t iData;
+
+std::vector<std::complex<double>> fft(const std::vector<std::complex<double>>& samples) {
+    // Get n, the number of samples 
+    int n = static_cast<int>(samples.size());
+
+    // Base case for recursion 
+    if (n == 1) {
+        return samples;
+    }
+
+    // Split samples into even and odd arrays
+    std::vector<std::complex<double>> even_samples(n / 2);
+    std::vector<std::complex<double>> odd_samples(n / 2);
+
+    for (int i = 0; i < n / 2; ++i) {
+        even_samples[i] = samples[2 * i];
+        odd_samples[i] = samples[2 * i + 1];
+    }
+
+    // Recursively run the above lines
+    std::vector<std::complex<double>> even_fft = fft(even_samples);
+    std::vector<std::complex<double>> odd_fft = fft(odd_samples);
+
+    // Combine the values at each level
+    std::vector<std::complex<double>> result(n);
+    for (int k = 0; k < n / 2; ++k) {
+        std::complex<double> t =
+            std::polar(1.0, -2 * M_PI * k / n) * odd_fft[k];
+        result[k] = even_fft[k] + t;
+        result[k + n / 2] = even_fft[k] - t; // Takes advantage of symmetry
+    }
+
+    return result;
+}
+
+void computeFFT(){
+
+  fft_output_bins = fft(fft_databank);
+
+	// Print results (for testing)
+
+  Serial.print('[');
+	for (size_t i = 0; i < fft_output_bins.size() - 1; ++i) {
+			// std::cout << "F[" << i << "] = " << output_freq_bins[i] << std::endl;
+      Serial.print(std::abs(fft_output_bins[i]));
+      Serial.print(", ");
+	}
+  Serial.print(std::abs(fft_output_bins[fft_output_bins.size()-1]));
+  Serial.println("]");
+
+  // Print output databins
+
+}
+
+void addBufferValsToDatabank(int16_t *buff, int buff_size){
+  for (int i = 0; i < buff_size; i++)
+  {
+    fft_databank[i + iData - 1] = buff[i];
+  }
+}
+
+// -------- Setup --------
+void setup() {
+  Serial.begin(115200);
 
 
-//   while (!Serial) {
-//     // wait for USB Serial to open
-//   }
+  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;); // Don't proceed, loop forever
+  }
 
-//   Serial.println("Teensy 4.1 WAV Recorder starting...");
+  // Show initial display buffer contents on the screen --
+  // the library initializes this with an Adafruit splash screen.
+  display.display();
+  delay(2000); // Pause for 2 seconds
 
-//   // Allocate audio memory blocks (tune as needed)
-//   AudioMemory(12);
+  // Clear the buffer
+  display.clearDisplay();
 
-//   // Initialize SD card (built-in on Teensy 4.1)
-//   if (!SD.begin(BUILTIN_SDCARD)) {
-//     Serial.println("SD.begin(BUILTIN_SDCARD) failed!");
-//     while (1) {
-//       delay(500);
-//     }
-//   }
-//   Serial.println("SD card initialized.");
+  // Draw a single pixel in white
+  display.drawPixel(10, 10, WHITE);
 
-//   // Open WAV file for writing
-//   audioFile = SD.open("RECORD.WAV", FILE_WRITE);
-//   if (!audioFile) {
-//     Serial.println("Failed to open RECORD.WAV for writing.");
-//     while (1) {
-//       delay(500);
-//     }
-//   }
+  // Show the display buffer on the screen. You MUST call display() after
+  // drawing commands to make them visible on screen!
+  display.display();
+  // delay(2000);
 
-//   // Write placeholder header
-//   writeWavHeader(audioFile);
-//   audioFile.flush();
-//   Serial.println("WAV header written.");
 
-//   // Start recording
-//   totalSamplesWritten = 0;
-//   queue1.begin();
-//   isRecording = true;
-//   recordTimer = 0;
+  while (!Serial) {
+    // wait for USB Serial to open
+  }
 
-//   Serial.print("Recording for ");
-//   Serial.print(RECORD_TIME_MS / 1000.0f);
-//   Serial.println(" seconds...");
-// }
+  Serial.println("Teensy 4.1 WAV Recorder starting...");
 
-// // -------- Main loop --------
-// void loop() {
+  iData = 0;
+
+  // Allocate audio memory blocks (tune as needed)
+  AudioMemory(12);
+
+  // Start recording
+  queue1.begin();
+  isRecording = true;
+}
+
+
+
+// -------- Main loop --------
+void loop() {
+
+  // TODO: Check for button press -> start recording, instead of starting immediately in setup().
   
+  if (isRecording) {
+    // Grab audio blocks from the queue and write them to SD
+    while (queue1.available() > 0) {
+      // Each block from AudioRecordQueue is 128 samples of 16-bit data
+      int16_t *buffer = (int16_t *)queue1.readBuffer();
 
-//   if (isRecording) {
-//     // Grab audio blocks from the queue and write them to SD
-//     while (queue1.available() > 0) {
-//       // Each block from AudioRecordQueue is 128 samples of 16-bit data
-//       int16_t *buffer = (int16_t *)queue1.readBuffer();
-//       if (buffer) {
-//         // Write raw PCM samples to file
-//         size_t bytesToWrite = 128 * sizeof(int16_t) * NUM_CHANNELS;  // mono
-//         audioFile.write((byte *)buffer, bytesToWrite);
+      if (buffer) {
+        // Write raw PCM samples to file
+        // THIS IS ALWAYS 128 SAMPLES, BECAUSE THAT'S THE BLOCK SIZE OF AudioRecordQueue
+        size_t bytesToWrite = 128 * sizeof(int16_t) * NUM_CHANNELS;  // mono
 
-//         totalSamplesWritten += 128;  // 128 samples in this block
-//       }
-//       queue1.freeBuffer();
-//     }
 
-//     // Stop after RECORD_TIME_MS
-//     if (recordTimer >= RECORD_TIME_MS) {
-//       Serial.println("Recording complete, stopping...");
-//       queue1.end();
-//       isRecording = false;
+        // TODO: CHANGE THIS LINE
+        audioFile.write((byte *)buffer, bytesToWrite);
 
-//       // Finalize header with correct sizes
-//       finalizeWavHeader(audioFile, totalSamplesWritten);
+        // Check if enough vals in analysis block
+        // Append all vals in buffer to my analysis block
 
-//       audioFile.flush();
-//       audioFile.close();
-//       Serial.println("WAV file closed. Done.");
+        addBufferValsToDatabank(buffer, 128);
+        
+        iData += 128;
 
-//       // Stop doing anything else
-//       while (1) {
-//         delay(1000);
-//       }
-//     }
-//   }
-// }
+        if (iData == FFT_DATABANK_SIZE){
+          // ready to complete fft
+
+          computeFFT();
+
+          iData = 0;
+        }
+
+
+
+      }
+      queue1.freeBuffer();
+    }
+  }
+}
