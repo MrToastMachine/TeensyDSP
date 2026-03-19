@@ -23,12 +23,16 @@ if args.file == None:
 csv_file = args.file
 df = pd.read_csv(csv_file)
 
-plt.plot(df.iloc[:,0] * 44100/1024, df.iloc[:,1])
+num_entries = df.shape[0]
+fs = 48000
+
+# plt.plot(df.iloc[:,0] * fs/num_entries, df.iloc[:,1])
+plt.plot(df.iloc[:,0] , df.iloc[:,1])
 # plt.xlim([0,1000])
 plt.show()
 
 
 """
 plt.plot(arr[:,1])
-plt.show()
+plt.show(abs_fft_bins)
 """
