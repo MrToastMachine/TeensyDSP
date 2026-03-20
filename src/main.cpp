@@ -1,5 +1,4 @@
-// Simple WAV recorder for Teensy 4.1
-// - Mono input (A0 by default, change if needed)
+// Simple WAV recorder for Teensy 4.1 - Mono input (A0 by default, change if needed)
 // - 16-bit, 44.1 kHz
 // - Writes to built-in microSD as "RECORD.WAV"
 
@@ -46,65 +45,98 @@ const uint32_t SAMPLE_RATE      = 44100;
 const uint16_t BITS_PER_SAMPLE  = 16;
 const uint16_t NUM_CHANNELS     = 1;    // mono
 
-const uint16_t FFT_DATABANK_SIZE = 8192;
-std::vector<std::complex<double>> fft_databank(FFT_DATABANK_SIZE);
-std::vector<std::complex<double>> fft_output_bins(FFT_DATABANK_SIZE);
-
 bool isRecording = false;
 
-uint16_t iData;
 
-std::vector<std::complex<double>> fft(const std::vector<std::complex<double>>& samples) {
-    // Get n, the number of samples 
-    int n = static_cast<int>(samples.size());
+// FFT stuff
 
-    // Base case for recursion 
+const int NUM_SAMPLES = 8192;
+
+using Complex = std::complex<double>;
+Complex sample_bank[NUM_SAMPLES];
+Complex fft_bins[NUM_SAMPLES];
+double abs_fft_bins[NUM_SAMPLES];
+
+int getMaxIndex(const double* input_arr, int n){
+	if (n < 1){
+		return 0;
+	}
+
+	int current_max_index = -1;
+	double current_max_val = -100.0;
+
+	for (int i = 0; i < NUM_SAMPLES; i++) {
+		if (input_arr[i] > current_max_val){
+			current_max_val = input_arr[i];
+			current_max_index = i;
+		}
+	}
+
+	return current_max_index;
+}
+
+void fft_arr(const Complex* samples, Complex* result, int n) {
+    // Base case
     if (n == 1) {
-        return samples;
+        result[0] = samples[0];
+        return;
     }
 
-    // Split samples into even and odd arrays
-    std::vector<std::complex<double>> even_samples(n / 2);
-    std::vector<std::complex<double>> odd_samples(n / 2);
+    // Split into even and odd
+    Complex* even_samples = new Complex[n / 2];
+    Complex* odd_samples  = new Complex[n / 2];
 
     for (int i = 0; i < n / 2; ++i) {
         even_samples[i] = samples[2 * i];
-        odd_samples[i] = samples[2 * i + 1];
+        odd_samples[i]  = samples[2 * i + 1];
     }
 
-    // Recursively run the above lines
-    std::vector<std::complex<double>> even_fft = fft(even_samples);
-    std::vector<std::complex<double>> odd_fft = fft(odd_samples);
+    // Recurse into output buffers
+    Complex* even_fft = new Complex[n / 2];
+    Complex* odd_fft  = new Complex[n / 2];
 
-    // Combine the values at each level
-    std::vector<std::complex<double>> result(n);
+    fft_arr(even_samples, even_fft, n / 2);
+    fft_arr(odd_samples,  odd_fft,  n / 2);
+
+    // Combine
     for (int k = 0; k < n / 2; ++k) {
-        std::complex<double> t =
-            std::polar(1.0, -2 * M_PI * k / n) * odd_fft[k];
-        result[k] = even_fft[k] + t;
-        result[k + n / 2] = even_fft[k] - t; // Takes advantage of symmetry
+        Complex t = std::polar(1.0, -2.0 * M_PI * k / n) * odd_fft[k];
+        result[k]         = even_fft[k] + t;
+        result[k + n / 2] = even_fft[k] - t;
     }
 
-    return result;
+    delete[] even_samples;
+    delete[] odd_samples;
+    delete[] even_fft;
+    delete[] odd_fft;
 }
 
-void computeFFT(){
+void arr_computeFFT(const std::string& filename){
 
-  fft_output_bins = fft(fft_databank);
+	std::vector<Complex> wavData;
+
+	loadWavFile(filename, wavData, NUM_SAMPLES);
+
+	fft_arr(sample_bank, fft_bins, NUM_SAMPLES);
 
 	// Print results (for testing)
+	for (size_t i = 0; i < NUM_SAMPLES; ++i) {
+		// std::cout << "F[" << i << "] = " << fft_bins[i] << std::endl;
+		double new_val = std::abs(fft_bins[i]);
+		
+		abs_fft_bins[i] = new_val;
 
-  Serial.print('[');
-	for (size_t i = 0; i < fft_output_bins.size() - 1; ++i) {
-			// std::cout << "F[" << i << "] = " << output_freq_bins[i] << std::endl;
-      Serial.print(std::abs(fft_output_bins[i]));
-      Serial.print(", ");
+		std::cout << i << ", " << new_val << std::endl;
 	}
-  Serial.print(std::abs(fft_output_bins[fft_output_bins.size()-1]));
-  Serial.println("]");
 
-  // Print output databins
+	int max_index = getMaxIndex(abs_fft_bins, NUM_SAMPLES);
 
+	double strongest_freq = (double)max_index * ((double)fs / (double)NUM_SAMPLES);
+
+	
+	std::cout << "Max index: " << max_index << std::endl;
+	std::cout << "Strongest Freq: " << strongest_freq << std::endl;
+		
 }
 
 void addBufferValsToDatabank(int16_t *buff, int buff_size){
