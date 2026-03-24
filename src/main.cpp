@@ -39,8 +39,6 @@ AudioConnection          patchCord1(adc1, queue1);
 // No audio shield, so no AudioControl object needed
 
 // -------- SD / WAV Globals --------
-File audioFile;
-
 const uint32_t SAMPLE_RATE      = 44100;
 const uint16_t BITS_PER_SAMPLE  = 16;
 const uint16_t NUM_CHANNELS     = 1;    // mono
@@ -50,20 +48,22 @@ bool isRecording = false;
 
 // FFT stuff
 
-const int NUM_SAMPLES = 8192;
+uint16_t iData = 0;
 
-using Complex = std::complex<double>;
+const int NUM_SAMPLES = 16384;
+
+using Complex = std::complex<float>;
 Complex sample_bank[NUM_SAMPLES];
 Complex fft_bins[NUM_SAMPLES];
-double abs_fft_bins[NUM_SAMPLES];
+float abs_fft_bins[NUM_SAMPLES];
 
-int getMaxIndex(const double* input_arr, int n){
+int getMaxIndex(const float* input_arr, int n){
 	if (n < 1){
 		return 0;
 	}
 
 	int current_max_index = -1;
-	double current_max_val = -100.0;
+	float current_max_val = -100.0;
 
 	for (int i = 0; i < NUM_SAMPLES; i++) {
 		if (input_arr[i] > current_max_val){
@@ -75,75 +75,111 @@ int getMaxIndex(const double* input_arr, int n){
 	return current_max_index;
 }
 
+/* brief: Compute the FFT of a signal
+  - samples: arr of data points to analyze
+  - result: arr to store FFT output bins (same size as samples)
+  - n: number of samples (must be a power of 2)÷
+  (disclaimer claude did this one - used to be recursive, but I changed it to iterative in-place to save memory and avoid recursion on an embedded system)
+*/
 void fft_arr(const Complex* samples, Complex* result, int n) {
-    // Base case
-    if (n == 1) {
-        result[0] = samples[0];
-        return;
+    // Copy input into result buffer (we work in-place from here)
+    for (int i = 0; i < n; i++) {
+        result[i] = samples[i];
     }
 
-    // Split into even and odd
-    Complex* even_samples = new Complex[n / 2];
-    Complex* odd_samples  = new Complex[n / 2];
+    // Bit-reversal permutation
+    // Reorders the array so that the iterative butterfly stages work correctly.
+    // e.g. for n=8: index 1 (001) <-> index 4 (100), index 3 (011) <-> index 6 (110)
+    int bits = 0;
+    while ((1 << bits) < n) bits++;  // bits = log2(n)
 
-    for (int i = 0; i < n / 2; ++i) {
-        even_samples[i] = samples[2 * i];
-        odd_samples[i]  = samples[2 * i + 1];
+    for (int i = 0; i < n; i++) {
+        int rev = 0;
+        for (int b = 0; b < bits; b++) {
+            if (i & (1 << b))
+                rev |= (1 << (bits - 1 - b));
+        }
+        if (i < rev) std::swap(result[i], result[rev]);
     }
 
-    // Recurse into output buffers
-    Complex* even_fft = new Complex[n / 2];
-    Complex* odd_fft  = new Complex[n / 2];
+    // Iterative butterfly stages
+    // The recursive version naturally split into log2(n) levels.
+    // Here we do those same levels explicitly, bottom-up.
+    // 'len' is the size of the sub-FFT at each stage: 2, 4, 8, 16 ... up to n
+    for (int len = 2; len <= n; len *= 2) {
+        // Twiddle factor step: the angle increment for this stage
+        float ang = -2.0 * M_PI / len;
+        Complex wlen(cos(ang), sin(ang));  // Base twiddle factor for this stage
 
-    fft_arr(even_samples, even_fft, n / 2);
-    fft_arr(odd_samples,  odd_fft,  n / 2);
+        // Step through the array in chunks of 'len'
+        for (int i = 0; i < n; i += len) {
+            Complex w(1.0, 0.0);  // Current twiddle factor, starts at e^0 = 1
 
-    // Combine
-    for (int k = 0; k < n / 2; ++k) {
-        Complex t = std::polar(1.0, -2.0 * M_PI * k / n) * odd_fft[k];
-        result[k]         = even_fft[k] + t;
-        result[k + n / 2] = even_fft[k] - t;
+            // Butterfly operation on each pair within this chunk
+            for (int k = 0; k < len / 2; k++) {
+                Complex u = result[i + k];
+                Complex t = w * result[i + k + len / 2];
+
+                // Same butterfly math as the recursive version
+                result[i + k]           = u + t;
+                result[i + k + len / 2] = u - t;
+
+                w *= wlen;  // Advance twiddle factor to next position
+            }
+        }
     }
-
-    delete[] even_samples;
-    delete[] odd_samples;
-    delete[] even_fft;
-    delete[] odd_fft;
 }
 
-void arr_computeFFT(const std::string& filename){
-
-	std::vector<Complex> wavData;
-
-	loadWavFile(filename, wavData, NUM_SAMPLES);
+void arr_computeFFT(){
 
 	fft_arr(sample_bank, fft_bins, NUM_SAMPLES);
 
-	// Print results (for testing)
-	for (size_t i = 0; i < NUM_SAMPLES; ++i) {
+  // Print results (for testing)
+	for (size_t i = 0; i < NUM_SAMPLES/2; ++i) {
 		// std::cout << "F[" << i << "] = " << fft_bins[i] << std::endl;
-		double new_val = std::abs(fft_bins[i]);
+		float new_val = std::abs(fft_bins[i]);
+		
+		abs_fft_bins[i] = new_val;
+	}
+
+	int max_index = getMaxIndex(abs_fft_bins + 1, NUM_SAMPLES / 2 - 1) + 1;
+
+
+  float strongest_freq = (float)max_index * ((float)SAMPLE_RATE / (float)NUM_SAMPLES);
+
+	
+	Serial.print(">Strongest Freq:");
+  Serial.println(strongest_freq);
+
+  /*
+	// Print results (for testing)
+	for (size_t i = 0; i < NUM_SAMPLES/2; ++i) {
+		// std::cout << "F[" << i << "] = " << fft_bins[i] << std::endl;
+		float new_val = std::abs(fft_bins[i]);
 		
 		abs_fft_bins[i] = new_val;
 
-		std::cout << i << ", " << new_val << std::endl;
+    Serial.print(">i:");
+    Serial.println(i);
+    Serial.print(">new_val:");
+    Serial.println(new_val);
 	}
+  */
 
-	int max_index = getMaxIndex(abs_fft_bins, NUM_SAMPLES);
+  iData = 0; // reset for next round of data collection
 
-	double strongest_freq = (double)max_index * ((double)fs / (double)NUM_SAMPLES);
-
-	
-	std::cout << "Max index: " << max_index << std::endl;
-	std::cout << "Strongest Freq: " << strongest_freq << std::endl;
-		
 }
+
 
 void addBufferValsToDatabank(int16_t *buff, int buff_size){
   for (int i = 0; i < buff_size; i++)
   {
-    fft_databank[i + iData - 1] = buff[i];
+    Complex c = Complex(static_cast<float>(buff[i]));
+    sample_bank[iData + i] = c;
   }
+
+  iData += buff_size;
+
 }
 
 // -------- Setup --------
@@ -208,23 +244,17 @@ void loop() {
         // THIS IS ALWAYS 128 SAMPLES, BECAUSE THAT'S THE BLOCK SIZE OF AudioRecordQueue
         size_t bytesToWrite = 128 * sizeof(int16_t) * NUM_CHANNELS;  // mono
 
-
-        // TODO: CHANGE THIS LINE
-        audioFile.write((byte *)buffer, bytesToWrite);
-
         // Check if enough vals in analysis block
         // Append all vals in buffer to my analysis block
 
         addBufferValsToDatabank(buffer, 128);
         
-        iData += 128;
 
-        if (iData == FFT_DATABANK_SIZE){
+        if (iData >= NUM_SAMPLES){
           // ready to complete fft
 
-          computeFFT();
+          arr_computeFFT();
 
-          iData = 0;
         }
 
 
