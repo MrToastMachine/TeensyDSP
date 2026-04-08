@@ -2,174 +2,10 @@
 // - 16-bit, 44.1 kHz
 // - Writes to built-in microSD as "RECORD.WAV"
 
-#include <Arduino.h>
-#include <Audio.h>
-#include <Wire.h>
-#include <SPI.h>
-#include <SD.h>
+#include "main.h"
 
 
-// OLED display libraries
-#include <SPI.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-#include <math.h>
-#include <stdio.h>
-#include <complex>
-
-#define SCREEN_WIDTH 128 // OLED display width, in pixels
-#define SCREEN_HEIGHT 64 // OLED display height, in pixels
-
-// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-
-// END OF OLED STUFF
-
-static const float FIR_TAPS[137] = {
-    0.000000000000000000,
-    0.000000832535230594,
-    0.000003706961893203,
-    0.000007161372398599,
-    0.000007400645312194,
-    0.000000000000000000,
-    -0.000017444659445724,
-    -0.000042787671122949,
-    -0.000068165187228727,
-    -0.000081136578995528,
-    -0.000068360961513349,
-    -0.000021060668432169,
-    0.000059393791692774,
-    0.000157957196244055,
-    0.000246454870149547,
-    0.000289265290668295,
-    0.000253626167102469,
-    0.000122242760772453,
-    -0.000095581982791624,
-    -0.000358596050522729,
-    -0.000597499429271173,
-    -0.000729352092388501,
-    -0.000680545794264630,
-    -0.000413057710879003,
-    0.000053701804624084,
-    0.000633600571974778,
-    0.001183139748433668,
-    0.001531036832012712,
-    0.001523597178583898,
-    0.001075478036053350,
-    0.000211455794659486,
-    -0.000915561715229788,
-    -0.002040925821033914,
-    -0.002841472608691193,
-    -0.003017408539067051,
-    -0.002384452619613174,
-    -0.000951145290077624,
-    0.001044248884503669,
-    0.003155830320990768,
-    0.004816015137567064,
-    0.005472631889370466,
-    0.004747461998935925,
-    0.002575149216985452,
-    -0.000720171759021599,
-    -0.004442941548188879,
-    -0.007650353438326037,
-    -0.009366544173755764,
-    -0.008843351381417845,
-    -0.005804570885326942,
-    -0.000605211383054280,
-    0.005750585595055144,
-    0.011760432840751045,
-    0.015730829397652787,
-    0.016185906507253062,
-    0.012289769287754694,
-    0.004179316184054498,
-    -0.006886532522969023,
-    -0.018621834348816101,
-    -0.028061630545595628,
-    -0.032112580303176180,
-    -0.028203265104829362,
-    -0.014898505991816562,
-    0.007661428393325394,
-    0.037607255320461899,
-    0.071527424823141617,
-    0.104978321126297139,
-    0.133229749119714830,
-    0.152102928851184371,
-    0.158733424628114073,
-    0.152102928851184371,
-    0.133229749119714830,
-    0.104978321126297167,
-    0.071527424823141617,
-    0.037607255320461899,
-    0.007661428393325394,
-    -0.014898505991816562,
-    -0.028203265104829373,
-    -0.032112580303176180,
-    -0.028061630545595628,
-    -0.018621834348816101,
-    -0.006886532522969025,
-    0.004179316184054498,
-    0.012289769287754698,
-    0.016185906507253062,
-    0.015730829397652780,
-    0.011760432840751048,
-    0.005750585595055145,
-    -0.000605211383054281,
-    -0.005804570885326947,
-    -0.008843351381417841,
-    -0.009366544173755771,
-    -0.007650353438326040,
-    -0.004442941548188883,
-    -0.000720171759021599,
-    0.002575149216985452,
-    0.004747461998935925,
-    0.005472631889370467,
-    0.004816015137567064,
-    0.003155830320990771,
-    0.001044248884503669,
-    -0.000951145290077624,
-    -0.002384452619613177,
-    -0.003017408539067052,
-    -0.002841472608691197,
-    -0.002040925821033913,
-    -0.000915561715229788,
-    0.000211455794659486,
-    0.001075478036053351,
-    0.001523597178583899,
-    0.001531036832012714,
-    0.001183139748433667,
-    0.000633600571974778,
-    0.000053701804624084,
-    -0.000413057710879004,
-    -0.000680545794264632,
-    -0.000729352092388500,
-    -0.000597499429271173,
-    -0.000358596050522729,
-    -0.000095581982791624,
-    0.000122242760772453,
-    0.000253626167102469,
-    0.000289265290668295,
-    0.000246454870149547,
-    0.000157957196244055,
-    0.000059393791692775,
-    -0.000021060668432169,
-    -0.000068360961513349,
-    -0.000081136578995528,
-    -0.000068165187228727,
-    -0.000042787671122950,
-    -0.000017444659445724,
-    0.000000000000000000,
-    0.000007400645312194,
-    0.000007161372398599,
-    0.000003706961893203,
-    0.000000832535230594,
-    0.000000000000000000,
-}
-
-// -------- Audio Objects --------
-// Use analog input (mono). On Teensy 4.1, A0 is a good default.
-// You can change AUDIO_INPUT_PIN below if you like.
-#define AUDIO_INPUT_PIN A0
 
 AudioInputAnalog         adc1(AUDIO_INPUT_PIN);  // mono analog in
 AudioRecordQueue         queue1;                 // queue for recording
@@ -184,7 +20,6 @@ const uint16_t NUM_CHANNELS     = 1;    // mono
 
 bool isRecording = false;
 
-
 // FFT stuff
 
 // FIR filter taps
@@ -194,9 +29,45 @@ uint16_t iData = 0;
 const int NUM_SAMPLES = 16384;
 
 using Complex = std::complex<float>;
-Complex sample_bank[NUM_SAMPLES];
+// float raw_samples[NUM_SAMPLES]
+Complex downsampled_databank[NUM_SAMPLES];
 Complex fft_bins[NUM_SAMPLES];
 float abs_fft_bins[NUM_SAMPLES];
+
+
+void LPFilter_init(s_LPFilter *f) {
+  int i;
+  for (i = 0; i < FIR_TAPS; ++i)
+    f->history[i] = 0;
+  f->last_index = 0;
+}
+
+void LPFilter_put(s_LPFilter *f, float input) {
+  f->history[f->last_index++] = input;
+
+  if (f->last_index == FIR_TAPS)
+    f->last_index = 0;
+}
+
+float LPFilter_get(s_LPFilter *f) {
+  long long acc = 0;
+  int index = f->last_index, i;
+  int index_sym = index - 1;
+
+  for (i = 0; i < (FIR_TAPS + 1) / 2 - 1; ++i) {
+    index_sym =
+        (index_sym != FIR_TAPS - 1) ? index_sym + 1 : 0;
+    index = (index != 0) ? index - 1 : FIR_TAPS - 1;
+    //		index_sym = (index < IMPEDANCECHECKFILTER_TAP_NUM-1-(2*i)) ?
+    // index +1 +2*i : index - IMPEDANCECHECKFILTER_TAP_NUM+1 + 2*i;
+
+    acc += ((long long)f->history[index] + (long long)f->history[index_sym]) *
+           FIR_TAPS[i];
+  }
+  index = (index != 0) ? index - 1 : FIR_TAPS - 1;
+  acc += (long long)f->history[index] * FIR_TAPS[i];
+}
+
 
 int getMaxIndex(const float* input_arr, int n){
 	if (n < 1){
@@ -312,7 +183,14 @@ void arr_computeFFT(){
 }
 
 
+
 void addBufferValsToDatabank(int16_t *buff, int buff_size){
+  
+  for (int i = 0; i < buff_size; i++)
+  {
+    // put and get?
+  }
+  
   for (int i = 0; i < buff_size; i++)
   {
     Complex c = Complex(static_cast<float>(buff[i]));
@@ -367,8 +245,6 @@ void setup() {
   isRecording = true;
 }
 
-
-
 // -------- Main loop --------
 void loop() {
 
@@ -388,8 +264,10 @@ void loop() {
         // Check if enough vals in analysis block
         // Append all vals in buffer to my analysis block
 
+        //this function also implements the FIR filter
         addBufferValsToDatabank(buffer, 128);
         
+        /*
 
         if (iData >= NUM_SAMPLES){
           // ready to complete fft
@@ -398,6 +276,7 @@ void loop() {
 
         }
 
+        */
 
 
       }
