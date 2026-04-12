@@ -20,192 +20,33 @@ const uint16_t NUM_CHANNELS     = 1;    // mono
 
 bool isRecording = false;
 
-// FFT stuff
+uint16_t time_since_last_tune_ms = 1000;
+uint64_t last_tune_time_ms = 1000;
 
-// FIR filter taps
+s_yin_buffer sample_bank;
+int64_t d[MAX_TAU];  // accumulator for the squared differences
+float d_cmnd[MAX_TAU];    // normalised, float
 
-uint16_t iData = 0;
-
-const int NUM_SAMPLES = 16384;
-
-using Complex = std::complex<float>;
-// float raw_samples[NUM_SAMPLES]
-Complex downsampled_databank[NUM_SAMPLES];
-Complex fft_bins[NUM_SAMPLES];
-float abs_fft_bins[NUM_SAMPLES];
-
-
-void LPFilter_init(s_LPFilter *f) {
-  int i;
-  for (i = 0; i < FIR_TAPS; ++i)
-    f->history[i] = 0;
-  f->last_index = 0;
-}
-
-void LPFilter_put(s_LPFilter *f, float input) {
-  f->history[f->last_index++] = input;
-
-  if (f->last_index == FIR_TAPS)
-    f->last_index = 0;
-}
-
-float LPFilter_get(s_LPFilter *f) {
-  long long acc = 0;
-  int index = f->last_index, i;
-  int index_sym = index - 1;
-
-  for (i = 0; i < (FIR_TAPS + 1) / 2 - 1; ++i) {
-    index_sym =
-        (index_sym != FIR_TAPS - 1) ? index_sym + 1 : 0;
-    index = (index != 0) ? index - 1 : FIR_TAPS - 1;
-    //		index_sym = (index < IMPEDANCECHECKFILTER_TAP_NUM-1-(2*i)) ?
-    // index +1 +2*i : index - IMPEDANCECHECKFILTER_TAP_NUM+1 + 2*i;
-
-    acc += ((long long)f->history[index] + (long long)f->history[index_sym]) *
-           FIR_TAPS[i];
-  }
-  index = (index != 0) ? index - 1 : FIR_TAPS - 1;
-  acc += (long long)f->history[index] * FIR_TAPS[i];
-}
-
-
-int getMaxIndex(const float* input_arr, int n){
-	if (n < 1){
-		return 0;
-	}
-
-	int current_max_index = -1;
-	float current_max_val = -100.0;
-
-	for (int i = 0; i < NUM_SAMPLES; i++) {
-		if (input_arr[i] > current_max_val){
-			current_max_val = input_arr[i];
-			current_max_index = i;
-		}
-	}
-
-	return current_max_index;
-}
-
-/* brief: Compute the FFT of a signal
-  - samples: arr of data points to analyze
-  - result: arr to store FFT output bins (same size as samples)
-  - n: number of samples (must be a power of 2)÷
-  (disclaimer claude did this one - used to be recursive, but I changed it to iterative in-place to save memory and avoid recursion on an embedded system)
-*/
-void fft_arr(const Complex* samples, Complex* result, int n) {
-    // Copy input into result buffer (we work in-place from here)
-    for (int i = 0; i < n; i++) {
-        result[i] = samples[i];
-    }
-
-    // Bit-reversal permutation
-    // Reorders the array so that the iterative butterfly stages work correctly.
-    // e.g. for n=8: index 1 (001) <-> index 4 (100), index 3 (011) <-> index 6 (110)
-    int bits = 0;
-    while ((1 << bits) < n) bits++;  // bits = log2(n)
-
-    for (int i = 0; i < n; i++) {
-        int rev = 0;
-        for (int b = 0; b < bits; b++) {
-            if (i & (1 << b))
-                rev |= (1 << (bits - 1 - b));
-        }
-        if (i < rev) std::swap(result[i], result[rev]);
-    }
-
-    // Iterative butterfly stages
-    // The recursive version naturally split into log2(n) levels.
-    // Here we do those same levels explicitly, bottom-up.
-    // 'len' is the size of the sub-FFT at each stage: 2, 4, 8, 16 ... up to n
-    for (int len = 2; len <= n; len *= 2) {
-        // Twiddle factor step: the angle increment for this stage
-        float ang = -2.0 * M_PI / len;
-        Complex wlen(cos(ang), sin(ang));  // Base twiddle factor for this stage
-
-        // Step through the array in chunks of 'len'
-        for (int i = 0; i < n; i += len) {
-            Complex w(1.0, 0.0);  // Current twiddle factor, starts at e^0 = 1
-
-            // Butterfly operation on each pair within this chunk
-            for (int k = 0; k < len / 2; k++) {
-                Complex u = result[i + k];
-                Complex t = w * result[i + k + len / 2];
-
-                // Same butterfly math as the recursive version
-                result[i + k]           = u + t;
-                result[i + k + len / 2] = u - t;
-
-                w *= wlen;  // Advance twiddle factor to next position
-            }
-        }
-    }
-}
-
-void arr_computeFFT(){
-
-	fft_arr(sample_bank, fft_bins, NUM_SAMPLES);
-
-  // Print results (for testing)
-	for (size_t i = 0; i < NUM_SAMPLES/2; ++i) {
-		// std::cout << "F[" << i << "] = " << fft_bins[i] << std::endl;
-		float new_val = std::abs(fft_bins[i]);
-		
-		abs_fft_bins[i] = new_val;
-	}
-
-	int max_index = getMaxIndex(abs_fft_bins + 1, NUM_SAMPLES / 2 - 1) + 1;
-
-
-  float strongest_freq = (float)max_index * ((float)SAMPLE_RATE / (float)NUM_SAMPLES);
-
-	
-	Serial.print(">Strongest Freq:");
-  Serial.println(strongest_freq);
-
-  /*
-	// Print results (for testing)
-	for (size_t i = 0; i < NUM_SAMPLES/2; ++i) {
-		// std::cout << "F[" << i << "] = " << fft_bins[i] << std::endl;
-		float new_val = std::abs(fft_bins[i]);
-		
-		abs_fft_bins[i] = new_val;
-
-    Serial.print(">i:");
-    Serial.println(i);
-    Serial.print(">new_val:");
-    Serial.println(new_val);
-	}
-  */
-
-  iData = 0; // reset for next round of data collection
-
-}
-
-
-
-void addBufferValsToDatabank(int16_t *buff, int buff_size){
-  
-  for (int i = 0; i < buff_size; i++)
+void initBuffer(s_yin_buffer *buff){
+  for (int i = 0; i < YIN_BUFF_SIZE; i++)
   {
-    // put and get?
+    buff->history[i] = 0;
   }
-  
-  for (int i = 0; i < buff_size; i++)
-  {
-    Complex c = Complex(static_cast<float>(buff[i]));
-    sample_bank[iData + i] = c;
-  }
-
-  iData += buff_size;
-
 }
 
-// -------- Setup --------
-void setup() {
-  Serial.begin(115200);
+bool addToBuffer(s_yin_buffer *buff, int16_t new_val){
+  buff->history[buff->last_index++] = new_val;
 
+  if (buff->last_index == YIN_BUFF_SIZE) {
+    buff->last_index = 0;
+    return true;
+  }
+  else { 
+    return false;
+  }
+}
 
+void initDisplay(){
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
     Serial.println(F("SSD1306 allocation failed"));
@@ -226,23 +67,116 @@ void setup() {
   // Show the display buffer on the screen. You MUST call display() after
   // drawing commands to make them visible on screen!
   display.display();
-  // delay(2000);
+  delay(2000);
 
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(0x55E);
+  display.setTextWrap(false);
+  display.setCursor(44, 34);
+  display.println("C#3");
 
-  while (!Serial) {
-    // wait for USB Serial to open
+  display.display();
+}
+
+void printTauVals(){
+  Serial.print("[");
+  for (int i = 0; i < MAX_TAU - 1; i++)
+  {
+    Serial.print(d[i]);
+    Serial.print(", ");
+  }
+  Serial.print(d[MAX_TAU - 1]);
+  Serial.println("]");
+  
+}
+
+int32_t minValueIndex(int32_t d[], int len){
+  int32_t min = 0xFFFFFFFF;
+  uint8_t min_index = -1;
+  for (int i = 0; i < MAX_TAU; i++)
+  {
+    if (d[i] < min){
+      min_index = i;
+      min = d[i];
+    }
   }
 
-  Serial.println("Teensy 4.1 WAV Recorder starting...");
+  return min_index;
+}
 
-  iData = 0;
+void YIN(){
+  // run YIN algorithm on sample_bank
+  for (int tau = 1; tau < MAX_TAU; tau++) {
+    d[tau] = 0;
+    for (int i = 0; i < YIN_W; i++) {
+        int32_t delta = (int32_t)sample_bank.history[i] - (int32_t)sample_bank.history[i + tau];
+        d[tau] += delta * delta;
+    }
+  }
+
+  d_cmnd[0] = 1.0f;
+  float running_sum = 0.0f;
+
+  for (int tau = 1; tau < MAX_TAU; tau++) {
+    running_sum += (float)d[tau];
+    d_cmnd[tau] = (float)d[tau] / (running_sum / (float)tau);
+  }
+
+  // Threshold pick — find first tau where d_cmnd dips below threshold
+  const float THRESHOLD = 0.1f;
+  int best_tau = -1;
+
+  for (int tau = 2; tau < MAX_TAU; tau++) {
+      if (d_cmnd[tau] < THRESHOLD) {
+          best_tau = tau;
+          break;
+      }
+  }
+
+  // No pitch found — input is silence or unpitched noise
+  if (best_tau == -1) {
+      return;
+  }
+
+  // Parabolic interpolation — refine best_tau to sub-sample precision
+  // fits a curve through the winning bin and its two neighbours
+  float better_tau;
+  if (best_tau > 0 && best_tau < MAX_TAU - 1) {
+      float s0 = d_cmnd[best_tau - 1];
+      float s1 = d_cmnd[best_tau];
+      float s2 = d_cmnd[best_tau + 1];
+      better_tau = best_tau + (s2 - s0) / (2.0f * (2.0f * s1 - s0 - s2));
+  } else {
+      better_tau = (float)best_tau;
+  }
+
+  // Convert tau to Hz
+  float frequency = (float)SAMPLE_RATE / better_tau;
+
+  Serial.print(">tune:");
+  Serial.println(frequency);
+}
+
+// -------- Setup --------
+void setup() {
+
+  initBuffer(&sample_bank);
+
+  initDisplay();
+
+  Serial.begin(115200);
+  while (!Serial) {
+    delay(100);
+  }
+  Serial.println("Teensy 4.1 WAV Recorder starting...");
 
   // Allocate audio memory blocks (tune as needed)
   AudioMemory(12);
 
   // Start recording
   queue1.begin();
-  isRecording = true;
+  isRecording = false;
 }
 
 // -------- Main loop --------
@@ -250,6 +184,8 @@ void loop() {
 
   // TODO: Check for button press -> start recording, instead of starting immediately in setup().
   
+
+
   if (isRecording) {
     // Grab audio blocks from the queue and write them to SD
     while (queue1.available() > 0) {
@@ -257,28 +193,15 @@ void loop() {
       int16_t *buffer = (int16_t *)queue1.readBuffer();
 
       if (buffer) {
-        // Write raw PCM samples to file
         // THIS IS ALWAYS 128 SAMPLES, BECAUSE THAT'S THE BLOCK SIZE OF AudioRecordQueue
-        size_t bytesToWrite = 128 * sizeof(int16_t) * NUM_CHANNELS;  // mono
 
-        // Check if enough vals in analysis block
-        // Append all vals in buffer to my analysis block
-
-        //this function also implements the FIR filter
-        addBufferValsToDatabank(buffer, 128);
-        
-        /*
-
-        if (iData >= NUM_SAMPLES){
-          // ready to complete fft
-
-          arr_computeFFT();
-
+        for (int i = 0; i < 128; i++)
+        {
+          if (addToBuffer(&sample_bank, buffer[i])){
+            Serial.println("TUNE!");
+            YIN();
+          }
         }
-
-        */
-
-
       }
       queue1.freeBuffer();
     }
