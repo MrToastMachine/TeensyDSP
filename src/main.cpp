@@ -70,13 +70,15 @@ void initDisplay(){
   delay(2000);
 
   display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(0x55E);
+  display.setTextSize(3);
+  display.setTextColor(WHITE);
   display.setTextWrap(false);
   display.setCursor(44, 34);
   display.println("C#3");
 
   display.display();
+
+  delay(2000);
 }
 
 void printTauVals(){
@@ -158,6 +160,59 @@ void YIN(){
   Serial.println(frequency);
 }
 
+
+int findClosestIndex(float arr[], uint8_t arrLen, float target){
+    float res = arr[0];
+    int lo = 0, hi = arrLen;
+
+    while (lo <= hi) {
+        int mid = lo + (hi - lo) / 2;
+
+        // Update res if mid is closer to target
+        if (abs(arr[mid] - target) < abs(res - target)) {
+            res = arr[mid];
+
+            // In case of a tie, prefer larger value
+        }
+        else if (abs(arr[mid] - target) == abs(res - target)) {
+            res = max(res, arr[mid]);
+        }
+
+        if (arr[mid] == target) {
+            return arr[mid];
+        }
+        else if (arr[mid] < target) {
+            lo = mid + 1;
+        }
+        else {
+            hi = mid - 1;
+        }
+    }
+
+    return res;
+}
+
+void printNoteToLED(Note note);
+
+void testdrawstyles(void) {
+  display.clearDisplay();
+
+  display.setTextSize(1);             // Normal 1:1 pixel scale
+  display.setTextColor(WHITE);        // Draw white text
+  display.setCursor(0,0);             // Start at top-left corner
+  display.println(F("Hello, world!"));
+
+  display.setTextColor(BLACK, WHITE); // Draw 'inverse' text
+  display.println(3.141592);
+
+  display.setTextSize(2);             // Draw 2X-scale text
+  display.setTextColor(WHITE);
+  display.print(F("0x")); display.println(0xDEADBEEF, HEX);
+
+  display.display();
+  delay(2000);
+}
+
 // -------- Setup --------
 void setup() {
 
@@ -177,6 +232,10 @@ void setup() {
   // Start recording
   queue1.begin();
   isRecording = false;
+
+
+  // testdrawstyles();
+
 }
 
 // -------- Main loop --------

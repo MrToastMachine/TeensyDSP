@@ -30,7 +30,26 @@ const int YIN_BUFF_SIZE = 2048;
 const int MAX_TAU = 600;
 const int YIN_W = YIN_BUFF_SIZE - MAX_TAU;
 
+const String Notes[12] {
+  "A",
+  "A#",
+  "B",
+  "C",
+  "C#",
+  "D",
+  "D#",
+  "E",
+  "F",
+  "F#",
+  "G",
+  "G#"
+};
+
 struct s_yin_buffer {
   int last_index = 0;
   int16_t history[YIN_BUFF_SIZE];
+};
+
+struct Note {
+  int index;
 };

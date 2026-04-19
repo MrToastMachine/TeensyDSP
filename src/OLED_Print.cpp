@@ -8,6 +8,7 @@
 // *********/
 
 
+
 // // Capactive Touch
 // #include "Adafruit_MPR121.h"
 
@@ -390,6 +391,8 @@
 // void setup() {
 //   Serial.begin(115200);
 
+//   Serial.println("Asshole");
+
 //   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
 //   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
 //     Serial.println(F("SSD1306 allocation failed"));
@@ -416,18 +419,18 @@
 //   // drawing operations and then update the screen all at once by calling
 //   // display.display(). These examples demonstrate both approaches...
 
-//   Serial.println("Adafruit MPR121 Capacitive Touch sensor test"); 
+//   // Serial.println("Adafruit MPR121 Capacitive Touch sensor test"); 
   
-//   // Default address is 0x5A, if tied to 3.3V its 0x5B
-//   // If tied to SDA its 0x5C and if SCL then 0x5D
-//   if (!cap.begin(0x5B)) {
-//     Serial.println("MPR121 not found, check wiring?");
-//     while (1);
-//   }
-//   Serial.println("MPR121 found!");
+//   // // Default address is 0x5A, if tied to 3.3V its 0x5B
+//   // // If tied to SDA its 0x5C and if SCL then 0x5D
+//   // if (!cap.begin(0x5B)) {
+//   //   Serial.println("MPR121 not found, check wiring?");
+//   //   while (1);
+//   // }
+//   // Serial.println("MPR121 found!");
 
 
-// // #define RUN_ALL
+// #define RUN_ALL
 // #ifdef RUN_ALL
 
 //   testdrawline();      // Draw many lines
@@ -469,24 +472,24 @@
 
 // void loop() {
 //   // Get the currently touched pads
-//   currtouched = cap.touched();
+//   // currtouched = cap.touched();
 
-//   Serial.println(currtouched);
+//   // Serial.println(currtouched);
   
-//   for (uint8_t i=0; i<12; i++) {
-//     // it if *is* touched and *wasnt* touched before, alert!
-//     if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) ) {
-//       Serial.print(i); Serial.println(" touched");
-//       testdrawtriangle();
-//     }
-//     // if it *was* touched and now *isnt*, alert!
-//     if (!(currtouched & _BV(i)) && (lasttouched & _BV(i)) ) {
-//       Serial.print(i); Serial.println(" released");
-//       testdrawbitmap();
-//     }
-//   }
+//   // for (uint8_t i=0; i<12; i++) {
+//   //   // it if *is* touched and *wasnt* touched before, alert!
+//   //   if ((currtouched & _BV(i)) && !(lasttouched & _BV(i)) ) {
+//   //     Serial.print(i); Serial.println(" touched");
+//   //     testdrawtriangle();
+//   //   }
+//   //   // if it *was* touched and now *isnt*, alert!
+//   //   if (!(currtouched & _BV(i)) && (lasttouched & _BV(i)) ) {
+//   //     Serial.print(i); Serial.println(" released");
+//   //     testdrawbitmap();
+//   //   }
+//   // }
 
-//   // reset our state
-//   lasttouched = currtouched;
+//   // // reset our state
+//   // lasttouched = currtouched;
 
 // }
