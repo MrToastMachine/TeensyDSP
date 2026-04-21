@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <complex>
 
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 96
+
 #define NUM_FREQS 49
 
 // This starts at C1 (octave 1) and goes to A4 -----> ONLY A:440Hz TUNING
@@ -99,6 +102,8 @@ void getNearestNoteAndPrint(float note){
 
 	printf("Distance to halfway to up: %f\n", halfway_to_higher_note);
 	printf("Distance to halfway to down: %f\n", halfway_to_lower_note);
+
+	//
 }
 
 int main(int argc, char* argv[]){
