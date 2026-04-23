@@ -107,7 +107,7 @@ int32_t minValueIndex(int32_t d[], int len){
   return min_index;
 }
 
-void YIN(){
+float YIN(){
   // run YIN algorithm on sample_bank
   for (int tau = 1; tau < MAX_TAU; tau++) {
     d[tau] = 0;
@@ -158,6 +158,8 @@ void YIN(){
 
   Serial.print(">tune:");
   Serial.println(frequency);
+
+	return frequency;
 }
 
 
@@ -258,7 +260,10 @@ void loop() {
         {
           if (addToBuffer(&sample_bank, buffer[i])){
             Serial.println("TUNE!");
-            YIN();
+            float measured_freq = YIN();
+						
+						// call function in dspHelper here
+						// printNoteToLED()
           }
         }
       }
