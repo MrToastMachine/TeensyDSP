@@ -32,6 +32,15 @@ const std::string NOTES[12] = {
 	"B"
 };
 
+int mapFloatToInt(float f_low, float f_high, int d_low, int d_high, float input){
+	// pos of input in range f_low to f_high on a scale of 0 to 1
+	float progress = (input - f_low) / (f_high - f_low);
+
+	int int_full_scale = d_high - d_low;
+	int int_progress = round((float)int_full_scale * progress) + d_low;
+
+	return int_progress;
+}
 
 int findClosestIndex(const float *arr, uint8_t arrLen, float target){
     float res = arr[0];
@@ -103,8 +112,29 @@ void getNearestNoteAndPrint(float note){
 	printf("Distance to halfway to up: %f\n", halfway_to_higher_note);
 	printf("Distance to halfway to down: %f\n", halfway_to_lower_note);
 
-	//
+	int x_pos_screen = mapFloatToInt(closest_note_actual - halfway_to_lower_note, closest_note_actual + halfway_to_higher_note, 0, SCREEN_WIDTH, note);
+
+	printf("x position on LED screen: %d px\n", x_pos_screen);
 }
+
+int getXValForLED(float note){
+	int index = findClosestIndex(allPossibleFreqs, NUM_FREQS, note);
+	float closest_note_actual = allPossibleFreqs[index];
+	int note_index = index % 12;
+
+	int note_octave = index / 12 + 1;
+
+	int higher_note_index = std::min(index + 1, NUM_FREQS - 1);
+	int lower_note_index = std::max(index - 1, 0);
+
+	float halfway_to_higher_note = (allPossibleFreqs[higher_note_index] - closest_note_actual) / 2;
+	float halfway_to_lower_note = (closest_note_actual - allPossibleFreqs[lower_note_index]) / 2;
+
+	int x_pos_screen = mapFloatToInt(closest_note_actual - halfway_to_lower_note, closest_note_actual + halfway_to_higher_note, 0, SCREEN_WIDTH, note);
+
+	return x_pos_screen;
+}
+
 
 int main(int argc, char* argv[]){
 
@@ -116,7 +146,11 @@ int main(int argc, char* argv[]){
 
 	float test = std::atof(argv[1]);
 	printf("Arg given -> %f\n", test);
-	getNearestNoteAndPrint(test);
+	// getNearestNoteAndPrint(test);
+
+	int x_pos = getXValForLED(test);
+
+	printf("X position on screen -> %d px\n", x_pos);
 
 
 	return 0;	
