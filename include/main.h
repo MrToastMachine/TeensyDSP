@@ -4,7 +4,6 @@
 #include <SPI.h>
 #include <SD.h>
 
-
 // OLED display libraries
 #include <SPI.h>
 #include <Adafruit_GFX.h>
@@ -12,6 +11,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <complex>
+#include <string>
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels

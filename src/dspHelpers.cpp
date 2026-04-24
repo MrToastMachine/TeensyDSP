@@ -1,34 +1,8 @@
 // dspHelper.cpp
 //
-// Contains functions used for dsp and display stuff
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 96
 
-#define NUM_FREQS 49
-
-// This starts at C1 (octave 1) and goes to A4 -----> ONLY A:440Hz TUNING
-const float allPossibleFreqs[NUM_FREQS] = {32.7 ,  34.65,  36.71,  38.89,  41.2 ,
-        43.65,  46.25,  49.  ,  51.91,  55.  ,  58.27,  61.74,  65.41,
-        69.3 ,  73.42,  77.78,  82.41,  87.31,  92.5 ,  98.  , 103.83,
-       110.0  , 116.54, 123.47, 130.81, 138.59, 146.83, 155.56, 164.81,
-       174.61, 185.  , 196.  , 207.65, 220.  , 233.08, 246.94, 261.63,
-       277.18, 293.66, 311.13, 329.63, 349.23, 369.99, 392.  , 415.3 ,
-       440.0  };
-
-const std::string NOTES[12] = {
-	"C",
-	"C#",
-	"D",
-	"D#",
-	"E",
-	"F",
-	"F#",
-	"G",
-	"G#",
-	"A",
-	"A#",
-	"B"
-};
+#include "main.h"
+#include "dspHelpers.h"
 
 int mapFloatToInt(float f_low, float f_high, int d_low, int d_high, float input){
 	// pos of input in range f_low to f_high on a scale of 0 to 1
@@ -42,7 +16,7 @@ int mapFloatToInt(float f_low, float f_high, int d_low, int d_high, float input)
 
 int findClosestIndex(const float *arr, uint8_t arrLen, float target){
     float res = arr[0];
-    int lo = 0, hi = arrLen;
+    int lo = 0, hi = arrLen-1;
 
 		int closest_index = -1;
 
@@ -81,43 +55,22 @@ void getNearestNoteAndPrint(float note){
 	int note_index = index % 12;
 
 	int note_octave = index / 12 + 1;
-
-	printf("Closest index in freq bank -> %d\n", index);
-
-	printf("Closest Frequency -> %f\n", closest_note_actual);
-
-	printf("The closest note is %s%d\n", NOTES[note_index].c_str(), note_octave);
-
-	// The next thing to do is check distance to nearest notes
-	//
-	// Plot nearest note in center
-	// halfway to one note lower on left
-	// halfway to one note higher on right
-	// map this range to screen (arbitrary)
-	
-	printf("\n");
 		
 	int higher_note_index = std::min(index + 1, NUM_FREQS - 1);
 	int lower_note_index = std::max(index - 1, 0);
 	
-	printf("One note higher >> %f\n", allPossibleFreqs[higher_note_index]);
-	printf("One note lower >> %f\n", allPossibleFreqs[lower_note_index]);
-
 
 	float halfway_to_higher_note = (allPossibleFreqs[higher_note_index] - closest_note_actual) / 2;
 	float halfway_to_lower_note = (closest_note_actual - allPossibleFreqs[lower_note_index]) / 2;
 
-	printf("Distance to halfway to up: %f\n", halfway_to_higher_note);
-	printf("Distance to halfway to down: %f\n", halfway_to_lower_note);
-
 	int x_pos_screen = mapFloatToInt(closest_note_actual - halfway_to_lower_note, closest_note_actual + halfway_to_higher_note, 0, SCREEN_WIDTH, note);
 
-	printf("x position on LED screen: %d px\n", x_pos_screen);
 }
 
-int getXValForLED(float note){
+int getXValForLED(float note, std::string &current_closest_note){
 	int index = findClosestIndex(allPossibleFreqs, NUM_FREQS, note);
 	float closest_note_actual = allPossibleFreqs[index];
+
 	int note_index = index % 12;
 
 	int note_octave = index / 12 + 1;
@@ -130,5 +83,6 @@ int getXValForLED(float note){
 
 	int x_pos_screen = mapFloatToInt(closest_note_actual - halfway_to_lower_note, closest_note_actual + halfway_to_higher_note, 0, SCREEN_WIDTH, note);
 
+  current_closest_note = NOTES[note_index] + std::to_string(note_octave);
 	return x_pos_screen;
 }

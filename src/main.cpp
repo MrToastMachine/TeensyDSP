@@ -3,6 +3,7 @@
 // - Writes to built-in microSD as "RECORD.WAV"
 
 #include "main.h"
+#include "dspHelpers.h"
 
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
@@ -18,7 +19,7 @@ const uint32_t SAMPLE_RATE      = 44100;
 const uint16_t BITS_PER_SAMPLE  = 16;
 const uint16_t NUM_CHANNELS     = 1;    // mono
 
-bool isRecording = false;
+bool isRecording = true;
 
 uint16_t time_since_last_tune_ms = 1000;
 uint64_t last_tune_time_ms = 1000;
@@ -26,6 +27,8 @@ uint64_t last_tune_time_ms = 1000;
 s_yin_buffer sample_bank;
 int64_t d[MAX_TAU];  // accumulator for the squared differences
 float d_cmnd[MAX_TAU];    // normalised, float
+
+std::string current_closest_note = "Poop";  
 
 void initBuffer(s_yin_buffer *buff){
   for (int i = 0; i < YIN_BUFF_SIZE; i++)
@@ -56,8 +59,9 @@ void initDisplay(){
   // Show initial display buffer contents on the screen --
   // the library initializes this with an Adafruit splash screen.
   display.display();
-  delay(2000); // Pause for 2 seconds
+  delay(200); // Pause for 2 seconds
 
+  return;
   // Clear the buffer
   display.clearDisplay();
 
@@ -81,6 +85,21 @@ void initDisplay(){
   delay(2000);
 }
 
+void updateDisplayTuning(int circlePos){
+  
+  display.clearDisplay();
+  display.setTextSize(3);
+  display.setTextColor(WHITE);
+  display.setTextWrap(false);
+  display.setCursor(44, 34);
+  display.println(current_closest_note.c_str());
+
+  display.drawCircle(circlePos, 60, 2, WHITE);
+
+  display.display();
+
+}
+
 void printTauVals(){
   Serial.print("[");
   for (int i = 0; i < MAX_TAU - 1; i++)
@@ -91,20 +110,6 @@ void printTauVals(){
   Serial.print(d[MAX_TAU - 1]);
   Serial.println("]");
   
-}
-
-int32_t minValueIndex(int32_t d[], int len){
-  int32_t min = 0xFFFFFFFF;
-  uint8_t min_index = -1;
-  for (int i = 0; i < MAX_TAU; i++)
-  {
-    if (d[i] < min){
-      min_index = i;
-      min = d[i];
-    }
-  }
-
-  return min_index;
 }
 
 float YIN(){
@@ -138,7 +143,7 @@ float YIN(){
 
   // No pitch found — input is silence or unpitched noise
   if (best_tau == -1) {
-      return;
+      return -0.0;
   }
 
   // Parabolic interpolation — refine best_tau to sub-sample precision
@@ -156,42 +161,10 @@ float YIN(){
   // Convert tau to Hz
   float frequency = (float)SAMPLE_RATE / better_tau;
 
-  Serial.print(">tune:");
-  Serial.println(frequency);
+  // Serial.print(">tune:");
+  // Serial.println(frequency);
 
 	return frequency;
-}
-
-
-int findClosestIndex(float arr[], uint8_t arrLen, float target){
-    float res = arr[0];
-    int lo = 0, hi = arrLen;
-
-    while (lo <= hi) {
-        int mid = lo + (hi - lo) / 2;
-
-        // Update res if mid is closer to target
-        if (abs(arr[mid] - target) < abs(res - target)) {
-            res = arr[mid];
-
-            // In case of a tie, prefer larger value
-        }
-        else if (abs(arr[mid] - target) == abs(res - target)) {
-            res = max(res, arr[mid]);
-        }
-
-        if (arr[mid] == target) {
-            return arr[mid];
-        }
-        else if (arr[mid] < target) {
-            lo = mid + 1;
-        }
-        else {
-            hi = mid - 1;
-        }
-    }
-
-    return res;
 }
 
 void printNoteToLED(Note note);
@@ -222,8 +195,10 @@ void setup() {
 
   initDisplay();
 
+  int start_time = millis();
+
   Serial.begin(115200);
-  while (!Serial) {
+  while (!Serial & millis() - start_time < 3000) {
     delay(100);
   }
   Serial.println("Teensy 4.1 WAV Recorder starting...");
@@ -233,7 +208,7 @@ void setup() {
 
   // Start recording
   queue1.begin();
-  isRecording = false;
+  // isRecording = false;
 
 
   // testdrawstyles();
@@ -250,6 +225,9 @@ void loop() {
   if (isRecording) {
     // Grab audio blocks from the queue and write them to SD
     while (queue1.available() > 0) {
+      if (queue1.available() > 4) {
+        queue1.freeBuffer();
+      }
       // Each block from AudioRecordQueue is 128 samples of 16-bit data
       int16_t *buffer = (int16_t *)queue1.readBuffer();
 
@@ -259,9 +237,15 @@ void loop() {
         for (int i = 0; i < 128; i++)
         {
           if (addToBuffer(&sample_bank, buffer[i])){
-            Serial.println("TUNE!");
+            // Serial.println("TUNE!");
             float measured_freq = YIN();
+
+            if (measured_freq){
+              int x_dot_pos = getXValForLED(measured_freq, current_closest_note);
+              updateDisplayTuning(x_dot_pos);
+            }
 						
+
 						// call function in dspHelper here
 						// printNoteToLED()
           }
